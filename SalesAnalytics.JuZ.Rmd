@@ -1,0 +1,122 @@
+---
+title: "Sales Analysis"
+author: "Zi Ju"
+date: "August 16 2024"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+subtitle: "2020-2023"
+---
+
+```{r loadLibraries, echo=FALSE, include=FALSE}
+library(DBI)
+library(kableExtra)
+library(ggplot2)
+```
+
+```{r connectToDb, echo=FALSE, include=FALSE}
+conn <- dbConnect(RMySQL::MySQL(),
+                user = 'ziju5200',
+                password = '12345678',
+                dbname = 'ziju5200db',
+                host = 'db4free.net')
+```
+
+## Sales Analysis
+
+```{r getYearRange, echo=FALSE}
+query_year_range <- "
+    SELECT DISTINCT year
+    FROM product_facts
+    ORDER BY year DESC
+"
+year_range <- dbGetQuery(conn, query_year_range)
+to_year <- year_range$year[1]
+from_year <- year_range$year[nrow(year_range)]
+```
+
+The top five products with the most sales across all years from `r paste(from_year)` to `r paste(to_year)` are shown in the table below.
+```{r q1, echo=FALSE}
+query_top_products <- "
+    SELECT prodName, SUM(total_amount) AS total_sales
+    FROM product_facts
+    GROUP BY prodName
+    ORDER BY total_sales DESC
+    LIMIT 5
+"
+top_products <- dbGetQuery(conn, query_top_products)
+
+# Generate table
+top_products %>%
+    kable() %>%
+    kable_styling(bootstrap_options = "striped", position = "center")
+```
+
+The total revenue per quarter per product for the most recent year is shown in the table below.
+```{r q2, echo=FALSE}
+query_revenue_quarter <- sprintf("
+    SELECT prodName, year, CEIL(month / 3) AS quarter, SUM(total_amount) AS total_revenue
+    FROM product_facts
+    WHERE year = %d
+    GROUP BY prodName, quarter", to_year)
+revenue_quarter <- dbGetQuery(conn, query_revenue_quarter)
+
+# Generate table
+revenue_quarter %>%
+    kable() %>%
+    kable_styling(bootstrap_options = "striped", position = "center")
+```
+
+The total revenue per product per country for the most recent two years is shown in the table below.
+```{r q3, echo=FALSE}
+second_recent_year <- year_range$year[2]
+query_revenue_country <- sprintf("
+    SELECT prodName, country, year, SUM(total_amount) AS total_revenue
+    FROM product_facts
+    WHERE year = %d OR year = %d
+    GROUP BY prodName, country, year", second_recent_year, to_year)
+revenue_country <- dbGetQuery(conn, query_revenue_country)
+
+# Generate table
+revenue_country %>%
+    kable() %>%
+    kable_styling(bootstrap_options = "striped", position = "center")
+```
+
+The line graph below shows the sales per year for which we have data.
+
+```{r q4, echo=FALSE}
+query_sales_year <- "
+    SELECT year, SUM(total_amount) AS total_sales
+    FROM product_facts
+    GROUP BY year
+"
+sales_year <- dbGetQuery(conn, query_sales_year)
+
+# Generate line graph
+ggplot(sales_year, aes(x = year, y = total_sales)) +
+    geom_line() +
+    geom_point() +
+    geom_text(aes(label = format(total_sales, big.mark = ",", scientific = FALSE)),
+              vjust = -1, hjust = 0.5, size = 2) +
+    scale_y_continuous(expand = c(0, 5000000),
+                       labels = scales::comma) + 
+    labs(title = "Sales per Year", x = "Year", y = "Total Sales") +
+    theme_minimal()
+```
+
+```{r disconnectToDb, echo=FALSE, include=FALSE}
+dbDisconnect(conn)
+```
+
+
+
+
+
+
+
+
+
+
+
